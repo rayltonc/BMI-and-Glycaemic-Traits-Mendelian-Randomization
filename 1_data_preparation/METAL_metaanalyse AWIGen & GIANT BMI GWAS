@@ -1,0 +1,44 @@
+ls -l ~/generic-metal/metal
+
+~/generic-metal/metal
+
+SCHEME STDERR
+GENOMICCONTROL ON
+AVERAGEFREQ ON
+MINMAXFREQ ON
+
+# Process the merged dataset
+PROCESS /home/raylton/mergeboth.txt
+
+# Specify columns from the AWIGen dataset
+MARKER rsid.giant
+ALLELE effect.allele noneffect.allele
+EFFECT bhat.awigen
+STDERR se.awigen
+PVALUE pval.awigen
+FREQ af.awigen
+
+# Process the merged dataset
+PROCESS /home/raylton/mergeboth.txt
+
+# Specify columns from the GIANT dataset
+MARKER rsid.giant
+ALLELE effect.allele noneffect.allele
+EFFECT bhat.giant
+STDERR se.giant
+PVALUE pval.giant
+FREQ af.giant
+
+# Process the merged dataset
+PROCESS /home/raylton/mergeboth.txt
+
+OUTFILE meta_analysis_ .tbl
+
+# Perform the meta-analysis
+ANALYZE
+
+## Complete results will be stored in file 'meta_analysis_1.tbl'
+
+ANALYZE HETEROGENEITY
+
+##Complete results will be stored in file 'meta_analysis_2.tbl'
