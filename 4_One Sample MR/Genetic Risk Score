@@ -1,0 +1,82 @@
+setwd("~/genetic")
+# Get list of all files
+file_list <- list.files(pattern = "AWIGEN_GRS.chr.*\\.profile")
+
+# Initialize an empty list to store data
+combined_data <- list()
+
+# Loop through each file, read it, and append to the list
+for (file in file_list) {
+  chr_data <- read.table(file, header = TRUE)  # Adjust header depending on your file format
+  combined_data[[file]] <- chr_data
+}
+
+# Combine all data into a single data frame (assuming they have the same structure)
+all_data_combined <- do.call(rbind, combined_data)
+
+# View the combined dataset
+head(all_data_combined)
+
+# Extract PRS for Each Chromosome
+head(rownames(all_data_combined))
+
+#Extract PRS Scores for Each Chromosome
+all_data_combined$CHR <- sub(".*chr([0-9]+).*", "\\1", rownames(all_data_combined))
+table(all_data_combined$CHR)
+
+#Summarize PRS by Chromosome
+prs_by_chr <- aggregate(SCORE ~ CHR, data = all_data_combined, sum)
+print(prs_by_chr)
+
+#Reshape data to Wide Format
+library(dplyr)
+library(tidyr)
+
+prs_wide <- all_data_combined %>%
+    select(IID, CHR, SCORE) %>%
+    pivot_wider(names_from = CHR, values_from = SCORE, names_prefix = "PRS_chr")
+
+head(prs_wide)
+
+# Sum PRS across all chromosomes for each individual
+prs_wide <- prs_wide %>%
+    mutate(Total_PRS = rowSums(select(., starts_with("PRS_chr")), na.rm = TRUE))
+
+# View the updated tibble
+head(prs_wide)
+
+#Checking Mean and Standard Deviation of PRS
+# Check the mean and standard deviation of the Total_PRS
+mean_prs <- mean(prs_wide$Total_PRS, na.rm = TRUE)
+sd_prs <- sd(prs_wide$Total_PRS, na.rm = TRUE)
+
+#Standardize PRS
+# Print the results
+cat("Mean of PRS:", mean_prs, "\n")
+cat("Standard Deviation of PRS:", sd_prs, "\n")
+
+# Standardize Total_PRS
+if (mean_prs != 0 | sd_prs != 1) {
+  prs_wide <- prs_wide %>%
+    mutate(Total_PRS = (Total_PRS - mean_prs) / sd_prs)
+
+  cat("PRS has been standardized.\n")
+} else {
+  cat("PRS is already standardized.\n")
+}
+
+# Verify the mean and SD of the standardized PRS
+mean(prs_wide$Total_PRS, na.rm = TRUE)
+sd(prs_wide$Total_PRS, na.rm = TRUE)
+# Rename the column "IID" to "study_id"
+prs_wide <- prs_wide |> rename(study_id = IID)
+
+# Check the updated column names
+head(prs_wide)
+
+#Combine prs, pca and phenotype data
+combined_data <- left_join(prs_wide, merged_data, by = "study_id")
+
+write.table(combined_data, "~/genetic/combined_data.txt", row.names = FALSE, col.names = TRUE, quote = FALSE, sep = "\t")
+
+nrow(combined_data)
