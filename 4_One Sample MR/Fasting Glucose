@@ -1,0 +1,77 @@
+# Convert to data frame before setting rownames
+combined_data <- as.data.frame(combined_data)
+
+# Convert sex to a factor
+combined_data$sex <- as.factor(combined_data$sex)
+
+# Set male "1" as the reference sex
+combined_data$sex <- relevel(combined_data$sex, ref = "1")
+
+# Convert site to a factor
+combined_data$site <- as.factor(combined_data$site)
+
+# Set Agincourt "1" as the reference site
+combined_data$site <- relevel(combined_data$site, ref = "1")
+
+# Remove NA
+combined_data <- combined_data[!is.na(combined_data$glucose_qc), ]
+
+# Fit the linear model
+g_resid <- lm(Total_PRS ~ age_c + sex + V3 + V4 + V5 + V6 + V7 + site, data = combined_data)
+
+# Check residuals
+g_resid$residuals
+
+# Create a data frame with residuals and corresponding study_id
+res <- data.frame(study_id = names(g_resid$residuals), g_resid.residuals = g_resid$residuals)
+
+# Check the first few rows of residuals
+head(res)
+
+# Remove existing study_id column if it exists
+combined_data$study_id <- NULL
+
+# Set rownames to column and give it a new name to avoid duplicates
+library(tibble)
+combined_data <- rownames_to_column(combined_data, var = "study_id")  # Rename to "study_id"
+
+# Merge residuals back with combined_data
+combined_data2 <- merge(combined_data, res, by = "study_id", all = TRUE)
+
+# Extract the residuals and add them to combined_data2
+combined_data2$g_resid_residuals <- g_resid$residuals
+
+# Check the first few rows of the merged data
+head(combined_data2)
+
+#Inverse glucose transformation
+combined_data$glucose_qc_inverse <- 1 / combined_data$glucose_qc
+
+# Log transform glucose_qc (add 1 to avoid log(0) issues, if necessary)
+combined_data$glucose_qc_log <- log(combined_data$glucose_qc + 1)  # Adjust if necessary (avoid log(0))
+
+# Load the MASS package
+library(MASS)
+
+# Apply Box-Cox transformation
+boxcox_result <- boxcox(lm(glucose_qc ~ 1, data = combined_data), plotit = FALSE)
+lambda <- boxcox_result$x[which.max(boxcox_result$y)]  # Find best lambda for transformation
+
+# Apply Box-Cox transformation using the best lambda
+combined_data$glucose_qc_boxcox <- (combined_data$glucose_qc^lambda - 1) / lambda
+
+#Add transformations to combined_data2
+combined_data2$glucose_qc_boxcox <- combined_data$glucose_qc_boxcox
+combined_data2$glucose_qc_inverse <- combined_data$glucose_qc_inverse
+combined_data2$glucose_qc_log <- combined_data$glucose_qc_log
+
+# Fit the GLM with glucose_qc as the dependent variable
+res <- glm(glucose_qc_boxcox ~ g_resid_residuals + age_c + sex + V3 + V4 + V5 + V6 + V7 + site,
+           data = combined_data2)
+
+res1 <- glm(glucose_qc_log ~ g_resid_residuals + age_c + sex + V3 + V4 + V5 + V6 + V7 + site,
+           data = combined_data2)
+
+
+# Display the model summary
+summary(res)
