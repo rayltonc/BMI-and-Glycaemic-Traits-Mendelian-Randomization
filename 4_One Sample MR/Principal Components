@@ -1,0 +1,32 @@
+library(dplyr)
+
+# Read eigenvalues (subfile.eigenval)
+eigenvalues <- read.table("subfile.eigenval", header = FALSE)
+
+# Read eigenvectors (subfile.eigenvec)
+eigenvectors <- read.table("subfile.eigenvec", header = FALSE)
+
+# Number of principal components (PCs)
+num_pcs <- nrow(eigenvalues)
+print(paste("Number of principal components:", num_pcs))
+# [1] "Number of principal components: 20"
+
+#Extract the first 5 PCs from the eigenvectors
+# Load the eigenvectors (PCA scores for each individual)
+eigenvectors <- read.table("subfile.eigenvec", header = FALSE)
+
+#Read in AWIGen phenotype data
+AWIGen1_subset <- read.table("AWIGen1_subset.txt", header = TRUE, sep = "", stringsAsFactors = FALSE)
+
+head(AWIGen1_subset)
+ 
+# Select relevant columns and rename V1 to study_id
+first_5_pcs <- eigenvectors %>%
+  dplyr::select(V1, V3:V7) %>%
+  rename(study_id = V1)
+
+# View the first few rows
+head(first_5_pcs)
+
+#merge AWIGen1 with PCA
+merged_data <- left_join(AWIGen1_subset, first_5_pcs, by = "study_id")
