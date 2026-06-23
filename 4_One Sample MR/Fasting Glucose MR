@@ -1,3 +1,8 @@
+#Load data
+library(data.table)
+
+combined_data <- fread("~/genetic/combined_data.txt")
+
 # Convert to data frame before setting rownames
 combined_data <- as.data.frame(combined_data)
 
@@ -19,8 +24,6 @@ combined_data <- combined_data[!is.na(combined_data$glucose_qc), ]
 # Fit the linear model
 g_resid <- lm(Total_PRS ~ age_c + sex + V3 + V4 + V5 + V6 + V7 + site, data = combined_data)
 
-# Check residuals
-g_resid$residuals
 
 # Create a data frame with residuals and corresponding study_id
 res <- data.frame(study_id = names(g_resid$residuals), g_resid.residuals = g_resid$residuals)
