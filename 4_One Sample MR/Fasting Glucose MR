@@ -47,31 +47,13 @@ head(combined_data2)
 #Inverse glucose transformation
 combined_data$glucose_qc_inverse <- 1 / combined_data$glucose_qc
 
-# Log transform glucose_qc (add 1 to avoid log(0) issues, if necessary)
-combined_data$glucose_qc_log <- log(combined_data$glucose_qc + 1)  # Adjust if necessary (avoid log(0))
-
-# Load the MASS package
-library(MASS)
-
-# Apply Box-Cox transformation
-boxcox_result <- boxcox(lm(glucose_qc ~ 1, data = combined_data), plotit = FALSE)
-lambda <- boxcox_result$x[which.max(boxcox_result$y)]  # Find best lambda for transformation
-
-# Apply Box-Cox transformation using the best lambda
-combined_data$glucose_qc_boxcox <- (combined_data$glucose_qc^lambda - 1) / lambda
 
 #Add transformations to combined_data2
-combined_data2$glucose_qc_boxcox <- combined_data$glucose_qc_boxcox
-combined_data2$glucose_qc_inverse <- combined_data$glucose_qc_inverse
-combined_data2$glucose_qc_log <- combined_data$glucose_qc_log
+combined_data2$glucose_qc_inverse <- combined_data$glucose_qc_log
 
 # Fit the GLM with glucose_qc as the dependent variable
-res <- glm(glucose_qc_boxcox ~ g_resid_residuals + age_c + sex + V3 + V4 + V5 + V6 + V7 + site,
+res <- glm(glucose_qc_inverse ~ g_resid_residuals + age_c + sex + V3 + V4 + V5 + V6 + V7 + site,
            data = combined_data2)
-
-res1 <- glm(glucose_qc_log ~ g_resid_residuals + age_c + sex + V3 + V4 + V5 + V6 + V7 + site,
-           data = combined_data2)
-
 
 # Display the model summary
 summary(res)
