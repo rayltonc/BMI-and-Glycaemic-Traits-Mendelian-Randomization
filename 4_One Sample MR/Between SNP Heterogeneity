@@ -1,1 +1,143 @@
+setwd("~/genetic")
+library(dplyr)
+library(data.table)
+AWIGen_genotype <- fread("~/genetic/AWIGen_genotype.txt")
+AWIGen1_subset <- read.table("AWIGen1_subset.txt", header = TRUE, sep = "", stringsAsFactors = FALSE)
+clumpedSNPs <- fread("~/genetic/clumped_snps.txt")
+merged_data <- merge(clumpedSNPs, AWIGen_genotype, by = c("chr", "bp"), all.x = TRUE)
+
+snp_list_rs <- merged_data$rsid.y
+
+write.table(snp_list_rs,
+            "~/genetic/snp_list_rs.txt",
+            row.names = FALSE,
+            col.names = FALSE,
+            quote = FALSE)
+
+#In terminal
+head ~/genetic/snp_list_chrpos.txt
+grep -Ff ~/genetic/snp_list_rs.txt all_imputed_map_qc_chr1.bim | head
+
+#PLINK
+for chr in {1..22}
+do
+  plink \
+    --bfile ~/genetic/all_imputed_map_qc_chr${chr} \
+    --extract ~/genetic/snp_list_rs.txt \
+    --recode A \
+    --out geno_chr${chr}
+done
+
+
+ 
+#R
+STEP 1: Load genotype files
+library(data.table)
+
+files <- list.files(pattern = "geno_chr.*\\.raw")
+
+geno_list <- lapply(files, function(f) {
+  dt <- fread(f)
+  dt[, c("PAT", "MAT", "SEX", "PHENOTYPE") := NULL]
+  return(dt)
+})
+
+geno_data <- Reduce(function(x, y) merge(x, y, by = c("FID", "IID")),
+                    geno_list)
+
+STEP 2: Clean SNP column names
+colnames(geno_data) <- sub("_.*$", "", colnames(geno_data))
+
+STEP 3: Load PCA + phenotype
+library(dplyr)
+
+# eigenvectors
+eigenvectors <- read.table("subfile.eigenvec", header = FALSE)
+
+# phenotype
+AWIGen1_subset <- read.table("AWIGen1_subset.txt", header = TRUE)
+
+# extract first 5 PCs
+first_5_pcs <- eigenvectors %>%
+  dplyr::select(V1, V3:V7) %>%
+  rename(study_id = V1)
+
+# merge
+combined_data <- left_join(AWIGen1_subset, first_5_pcs, by = "study_id")
+
+#STEP 4: Data prep
+combined_data$sex <- as.factor(combined_data$sex)
+combined_data$sex <- relevel(combined_data$sex, ref = "1")
+
+combined_data$site <- as.factor(combined_data$site)
+combined_data$site <- relevel(combined_data$site, ref = "1")
+
+# remove missing glucose
+combined_data <- combined_data[!is.na(combined_data$glucose_qc), ]
+
+#STEP 5: inverse transformation
+# Inverse of glucose (1 / glucose_qc)
+combined_data$inv_glucose_qc <- 1 / combined_data$glucose_qc
+
+skewness(combined_data$ inv_glucose_qc, na.rm = TRUE)
+
+#STEP 6: Merge with genotype data
+full_data <- merge(combined_data,
+                   geno_data,
+                   by.x = "study_id",
+                   by.y = "IID")
+
+#STEP 7: Define SNPs + βX
+#Full model
+snps_full <- intersect(merged_data$rsid.y, colnames(full_data))
+
+#Filtered model
+#filter based on HetPVal
+filtered_data <- merged_data[merged_data$HetPVal >= 0.1]
+
+snps_filtered <- intersect(filtered_data$rsid.y, colnames(full_data))
+
+bx <- filtered_data$Effect[
+  match(snps_filtered, filtered_data$rsid.y)
+]
+by <- sapply(snps_filtered, function(snp) {
+  fit <- lm(inv_glucose_qc ~ full_data[[snp]] +
+              age_c +
+              sex +
+              V3 + V4 + V5 + V6 + V7 +
+              site,
+            data = full_data)
+  coef(summary(fit))[2, "Estimate"]
+})
+
+by_se <- sapply(snps_filtered, function(snp) {
+  fit <- lm(inv_glucose_qc ~ full_data[[snp]] +
+              age_c +
+              sex +
+              V3 + V4 + V5 + V6 + V7 +
+              site,
+            data = full_data)
+  coef(summary(fit))[2, "Std. Error"]
+})
+#STEP 8: MR + heterogeneity
+beta_mr <- by / bx
+var_mr  <- (by_se^2) / (bx^2)
+w       <- 1 / var_mr
+
+beta_ivw <- sum(w * beta_mr) / sum(w)
+
+Q <- sum(w * (beta_mr - beta_ivw)^2)
+df <- length(snps_filtered) - 1
+p_value <- pchisq(Q, df, lower.tail = FALSE)
+
+Q
+df
+p_value
+I2 <- max(0, (Q - df) / Q)
+I2
+
+
+
+
+
 
